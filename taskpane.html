@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Report Automation</title><link rel="stylesheet" href="taskpane.css">
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <script src="swap-core.js"></script><script defer src="taskpane.js"></script>
+</head>
+<body><main>
+  <header><div class="mark">⇄</div><div><h1>Gender Swap</h1><p>Swap gendered words in the open document.</p></div></header>
+  <section class="card"><h2>Scope</h2>
+    <label><input type="radio" name="scope" value="document" checked> Entire document</label>
+    <label><input type="radio" name="scope" value="selection"> Current selection</label>
+  </section>
+  <section class="card"><h2>Replacement rules</h2>
+    <p class="mapping">he → her · she → him · him → her · her → him<br>his → hers · hers → his · himself ↔ herself</p>
+    <p class="note">Whole words only. Capitalisation and surrounding formatting are preserved.</p>
+  </section>
+  <button id="preview" class="secondary" type="button">Preview changes</button>
+  <button id="apply" class="primary" type="button" disabled>Apply Gender Swap</button>
+  <div id="status" class="status" role="status" aria-live="polite">Preview the document before applying changes.</div>
+  <details><summary>Important</summary><p>Save a copy first. “Her” and “his” can have more than one grammatical role, so review the result.</p></details>
+</main></body></html>

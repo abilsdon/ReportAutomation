@@ -1,0 +1,16 @@
+{
+  "name": "report-automation-word-addin",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Microsoft Word add-in for report automation, beginning with Gender Swap.",
+  "scripts": {
+    "start": "office-addin-debugging start manifest.xml desktop",
+    "stop": "office-addin-debugging stop manifest.xml",
+    "validate": "node node_modules/office-addin-manifest/cli.js validate manifest.xml",
+    "test": "node --test tests/*.test.js"
+  },
+  "devDependencies": {
+    "office-addin-debugging": "^6.0.0",
+    "office-addin-manifest": "^1.13.0"
+  }
+}
