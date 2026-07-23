@@ -6,7 +6,8 @@
   "use strict";
   const replacements = Object.freeze({
     he: "her", she: "him", him: "her", her: "him",
-    his: "hers", hers: "his", himself: "herself", herself: "himself"
+    his: "hers", hers: "his", himself: "herself", herself: "himself",
+    man: "woman", woman: "man", men: "women", women: "men"
   });
   function matchCase(source, target) {
     if (source === source.toUpperCase()) return target.toUpperCase();

@@ -8,6 +8,7 @@ This repository contains a Microsoft Word task-pane add-in. Its first tool is **
 - `him` → `her`, `her` → `him`
 - `his` → `hers`, `hers` → `his`
 - `himself` ↔ `herself`
+- `man` ↔ `woman`, `men` ↔ `women`
 
 Matching is case-insensitive and whole-word only. Common capitalisation and surrounding Word formatting are preserved. These direct rules follow the requested examples; users should review results because English pronouns have different grammatical roles.
 
