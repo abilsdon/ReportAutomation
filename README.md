@@ -17,9 +17,11 @@ Prerequisites: Microsoft Word desktop, Node.js 18 or later, and npm.
 
 1. Open PowerShell in this repository.
 2. Run `npm install`.
-3. Run `npm start`. The Office tooling installs a trusted localhost certificate, serves the add-in over HTTPS, sideloads `manifest.xml`, and opens Word.
+3. Run `npm.cmd start` and keep that terminal open. The Office tooling installs a trusted localhost certificate, serves the add-in over HTTPS, sideloads `manifest.xml`, and opens Word.
 4. In Word, open a document and select **Home → Report Automation → Open tools**.
-5. Run `npm stop` when finished.
+5. Run `npm.cmd stop` when finished.
+
+If Word says it cannot load the add-in, confirm the `npm.cmd start` terminal is still open and browse to `https://localhost:3000/taskpane.html`. The Gender Swap pane should appear there without a certificate warning.
 
 ## Test and validate
 

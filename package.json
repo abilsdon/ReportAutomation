@@ -4,13 +4,16 @@
   "private": true,
   "description": "Microsoft Word add-in for report automation, beginning with Gender Swap.",
   "scripts": {
-    "start": "office-addin-debugging start manifest.xml desktop",
+    "start": "office-addin-debugging start manifest.xml desktop --dev-server \"npm.cmd run serve\" --dev-server-port 3000 --no-debug",
+    "serve": "office-addin-dev-certs install && http-server . -S -C %USERPROFILE%\\.office-addin-dev-certs\\localhost.crt -K %USERPROFILE%\\.office-addin-dev-certs\\localhost.key -p 3000 -c-1",
     "stop": "office-addin-debugging stop manifest.xml",
     "validate": "node node_modules/office-addin-manifest/cli.js validate manifest.xml",
     "test": "node --test tests/*.test.js"
   },
   "devDependencies": {
+    "http-server": "^14.1.1",
     "office-addin-debugging": "^6.0.0",
+    "office-addin-dev-certs": "^1.13.0",
     "office-addin-manifest": "^1.13.0"
   }
 }
