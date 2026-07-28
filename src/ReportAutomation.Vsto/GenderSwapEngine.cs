@@ -4,35 +4,16 @@ using Word = Microsoft.Office.Interop.Word;
 
 namespace ReportAutomation.Vsto
 {
+    internal sealed class GenderSwapCandidate
+    {
+        internal Word.Range Range { get; set; }
+        internal string Original { get; set; }
+        internal string Replacement { get; set; }
+    }
+
     internal sealed class GenderSwapEngine
     {
-        private sealed class Match
-        {
-            internal Word.Range Range { get; set; }
-            internal string Original { get; set; }
-        }
-
-        internal int CountDocument(Word.Document document)
-        {
-            return FindDocumentMatches(document).Count;
-        }
-
-        internal int CountRange(Word.Range range)
-        {
-            return FindMatches(new[] { range }).Count;
-        }
-
-        internal int SwapDocument(Word.Document document)
-        {
-            return Apply(FindDocumentMatches(document));
-        }
-
-        internal int SwapRange(Word.Range range)
-        {
-            return Apply(FindMatches(new[] { range }));
-        }
-
-        private static List<Match> FindDocumentMatches(Word.Document document)
+        internal List<GenderSwapCandidate> FindDocumentCandidates(Word.Document document)
         {
             var stories = new List<Word.Range>();
             foreach (Word.Range firstStory in document.StoryRanges)
@@ -45,12 +26,17 @@ namespace ReportAutomation.Vsto
                 }
             }
 
-            return FindMatches(stories);
+            return FindCandidates(stories);
         }
 
-        private static List<Match> FindMatches(IEnumerable<Word.Range> scopes)
+        internal List<GenderSwapCandidate> FindRangeCandidates(Word.Range range)
         {
-            var matches = new List<Match>();
+            return FindCandidates(new[] { range });
+        }
+
+        private static List<GenderSwapCandidate> FindCandidates(IEnumerable<Word.Range> scopes)
+        {
+            var candidates = new List<GenderSwapCandidate>();
             foreach (Word.Range scope in scopes)
             {
                 int scopeEnd = scope.End;
@@ -67,25 +53,25 @@ namespace ReportAutomation.Vsto
 
                     while (search.Find.Execute())
                     {
-                        matches.Add(new Match { Range = search.Duplicate, Original = search.Text });
+                        candidates.Add(new GenderSwapCandidate
+                        {
+                            Range = search.Duplicate,
+                            Original = search.Text,
+                            Replacement = GenderRules.ReplacementFor(search.Text)
+                        });
                         search.Start = search.End;
                         search.End = scopeEnd;
                     }
                 }
             }
 
-            return matches;
-        }
-
-        private static int Apply(List<Match> matches)
-        {
-            for (int index = matches.Count - 1; index >= 0; index--)
+            candidates.Sort((left, right) =>
             {
-                Match match = matches[index];
-                match.Range.Text = GenderRules.ReplacementFor(match.Original);
-            }
+                int storyComparison = left.Range.StoryType.CompareTo(right.Range.StoryType);
+                return storyComparison != 0 ? storyComparison : left.Range.Start.CompareTo(right.Range.Start);
+            });
 
-            return matches.Count;
+            return candidates;
         }
     }
 }

@@ -8,7 +8,8 @@ The **Home → Report Automation** ribbon group provides:
 
 - **Gender Swap** — processes the entire document, including headers, footers, footnotes and other Word stories.
 - **Swap Selection** — processes only the currently selected text.
-- A match-count preview and confirmation before editing.
+- A match-count preview followed by **Yes**, **No**, or **Cancel** approval for every proposed change.
+- Word navigates to each match in document order before asking for approval.
 - One Word Undo record for the complete operation.
 - Whole-word matching and preservation of lowercase, Title Case and UPPERCASE.
 

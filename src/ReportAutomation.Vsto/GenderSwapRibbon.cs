@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using Office = Microsoft.Office.Core;
@@ -17,7 +18,7 @@ namespace ReportAutomation.Vsto
         <group id='ReportAutomation.Group' label='Report Automation'>
           <button id='ReportAutomation.SwapDocument' label='Gender Swap' size='large'
                   imageMso='ReplaceDialog' screentip='Swap gendered words'
-                  supertip='Preview and swap supported gendered words throughout the document.'
+                  supertip='Review and approve each supported gendered-word change throughout the document.'
                   onAction='SwapDocument' />
           <button id='ReportAutomation.SwapSelection' label='Swap Selection'
                   imageMso='SelectAll' screentip='Swap the selected text'
@@ -36,10 +37,9 @@ namespace ReportAutomation.Vsto
         public void SwapDocument(Office.IRibbonControl control)
         {
             Word.Document document = Globals.ThisAddIn.Application.ActiveDocument;
-            RunSwap(
+            ReviewChanges(
                 "the entire document, including headers, footers and footnotes",
-                () => new GenderSwapEngine().CountDocument(document),
-                () => new GenderSwapEngine().SwapDocument(document));
+                () => new GenderSwapEngine().FindDocumentCandidates(document));
         }
 
         public void SwapSelection(Office.IRibbonControl control)
@@ -52,18 +52,19 @@ namespace ReportAutomation.Vsto
             }
 
             Word.Range selectedRange = selection.Range.Duplicate;
-            RunSwap(
+            ReviewChanges(
                 "the current selection",
-                () => new GenderSwapEngine().CountRange(selectedRange),
-                () => new GenderSwapEngine().SwapRange(selectedRange));
+                () => new GenderSwapEngine().FindRangeCandidates(selectedRange));
         }
 
-        private static void RunSwap(string scopeDescription, Func<int> countAction, Func<int> swapAction)
+        private static void ReviewChanges(
+            string scopeDescription,
+            Func<List<GenderSwapCandidate>> findCandidates)
         {
             try
             {
-                int previewCount = countAction();
-                if (previewCount == 0)
+                List<GenderSwapCandidate> candidates = findCandidates();
+                if (candidates.Count == 0)
                 {
                     MessageBox.Show("No supported gendered words were found in " + scopeDescription + ".",
                         "Report Automation", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -71,8 +72,8 @@ namespace ReportAutomation.Vsto
                 }
 
                 DialogResult confirmation = MessageBox.Show(
-                    string.Format("Found {0} {1} to change in {2}.\n\nContinue?",
-                        previewCount, previewCount == 1 ? "word" : "words", scopeDescription),
+                    string.Format("Found {0} proposed {1} in {2}.\n\nReview each change?",
+                        candidates.Count, candidates.Count == 1 ? "change" : "changes", scopeDescription),
                     "Gender Swap Preview", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
                 if (confirmation != DialogResult.Yes)
                 {
@@ -80,22 +81,48 @@ namespace ReportAutomation.Vsto
                 }
 
                 Word.Application application = Globals.ThisAddIn.Application;
-                bool previousScreenUpdating = application.ScreenUpdating;
-                application.ScreenUpdating = false;
                 application.UndoRecord.StartCustomRecord("Gender Swap");
-                int changed;
+                int approved = 0;
+                int skipped = 0;
+                bool cancelled = false;
                 try
                 {
-                    changed = swapAction();
+                    for (int index = 0; index < candidates.Count; index++)
+                    {
+                        GenderSwapCandidate candidate = candidates[index];
+                        candidate.Range.Select();
+                        application.ActiveWindow.ScrollIntoView(candidate.Range, true);
+
+                        DialogResult decision = MessageBox.Show(
+                            string.Format("Change {0} of {1}\n\n{2}  →  {3}\n\nYes = approve   No = skip   Cancel = stop",
+                                index + 1, candidates.Count, candidate.Original, candidate.Replacement),
+                            "Review Gender Swap", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
+
+                        if (decision == DialogResult.Cancel)
+                        {
+                            cancelled = true;
+                            break;
+                        }
+
+                        if (decision == DialogResult.Yes)
+                        {
+                            candidate.Range.Text = candidate.Replacement;
+                            approved++;
+                        }
+                        else
+                        {
+                            skipped++;
+                        }
+                    }
                 }
                 finally
                 {
                     application.UndoRecord.EndCustomRecord();
-                    application.ScreenUpdating = previousScreenUpdating;
                 }
 
-                MessageBox.Show(string.Format("Complete — changed {0} {1}. You can undo this as one Word action.",
-                    changed, changed == 1 ? "word" : "words"), "Report Automation",
+                MessageBox.Show(string.Format(
+                    "{0}\n\nApproved: {1}\nSkipped: {2}\n\nApproved changes can be undone as one Word action.",
+                    cancelled ? "Review stopped." : "Review complete.", approved, skipped), "Report Automation",
                     MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception exception)
