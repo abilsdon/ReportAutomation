@@ -10,6 +10,8 @@ namespace ReportAutomation.Vsto
     [ComVisible(true)]
     public sealed class GenderSwapRibbon : Office.IRibbonExtensibility
     {
+        private static bool operationInProgress;
+
         private const string RibbonXml = @"
 <customUI xmlns='http://schemas.microsoft.com/office/2009/07/customui'>
   <ribbon>
@@ -18,7 +20,7 @@ namespace ReportAutomation.Vsto
         <group id='ReportAutomation.Group' label='Report Automation'>
           <button id='ReportAutomation.SwapDocument' label='Gender Swap' size='large'
                   imageMso='ReplaceDialog' screentip='Swap gendered words'
-                  supertip='Review and approve each supported gendered-word change throughout the document.'
+                  supertip='Review and approve each supported gendered-word change in the document body.'
                   onAction='SwapDocument' />
           <button id='ReportAutomation.SwapSelection' label='Swap Selection'
                   imageMso='SelectAll' screentip='Swap the selected text'
@@ -38,8 +40,8 @@ namespace ReportAutomation.Vsto
         {
             Word.Document document = Globals.ThisAddIn.Application.ActiveDocument;
             ReviewChanges(
-                "the entire document, including headers, footers and footnotes",
-                () => new GenderSwapEngine().FindDocumentCandidates(document));
+                "the document body",
+                progress => new GenderSwapEngine().FindDocumentCandidates(document, progress));
         }
 
         public void SwapSelection(Office.IRibbonControl control)
@@ -56,7 +58,7 @@ namespace ReportAutomation.Vsto
             {
                 ReviewChanges(
                     "the current selection",
-                    () => new GenderSwapEngine().FindRangeCandidates(selectedRange));
+                    progress => new GenderSwapEngine().FindRangeCandidates(selectedRange, progress));
             }
             finally
             {
@@ -66,11 +68,25 @@ namespace ReportAutomation.Vsto
 
         private static void ReviewChanges(
             string scopeDescription,
-            Func<GenderSwapScanResult> findCandidates)
+            Func<Action<int, int>, GenderSwapScanResult> findCandidates)
         {
+            if (operationInProgress)
+            {
+                return;
+            }
+
+            operationInProgress = true;
+            Word.Application application = Globals.ThisAddIn.Application;
             try
             {
-                using (GenderSwapScanResult scan = findCandidates())
+                application.StatusBar = "Gender Swap: scanning " + scopeDescription + "...";
+                using (GenderSwapScanResult scan = findCandidates((completed, total) =>
+                {
+                    application.StatusBar = total == 0
+                        ? "Gender Swap: no candidate words found."
+                        : string.Format("Gender Swap: locating change {0} of {1}...", completed, total);
+                    System.Windows.Forms.Application.DoEvents();
+                }))
                 {
                     List<GenderSwapCandidate> candidates = scan.Candidates;
                     if (candidates.Count == 0)
@@ -89,7 +105,6 @@ namespace ReportAutomation.Vsto
                         return;
                     }
 
-                    Word.Application application = Globals.ThisAddIn.Application;
                     var positionOffsets = new Dictionary<int, int>();
                     application.UndoRecord.StartCustomRecord("Gender Swap");
                     int approved = 0;
@@ -99,6 +114,8 @@ namespace ReportAutomation.Vsto
                     {
                         for (int index = 0; index < candidates.Count; index++)
                         {
+                            application.StatusBar = string.Format(
+                                "Gender Swap: reviewing change {0} of {1}...", index + 1, candidates.Count);
                             GenderSwapCandidate candidate = candidates[index];
                             int positionOffset;
                             positionOffsets.TryGetValue(candidate.ScopeIndex, out positionOffset);
@@ -152,6 +169,11 @@ namespace ReportAutomation.Vsto
             {
                 MessageBox.Show("Gender Swap could not complete:\n\n" + exception.Message,
                     "Report Automation", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                application.StatusBar = string.Empty;
+                operationInProgress = false;
             }
         }
     }

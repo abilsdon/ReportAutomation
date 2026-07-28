@@ -10,7 +10,6 @@ namespace ReportAutomation.Vsto
         internal int ScopeIndex { get; set; }
         internal int Start { get; set; }
         internal int Length { get; set; }
-        internal Word.WdStoryType StoryType { get; set; }
         internal string Original { get; set; }
         internal string Replacement { get; set; }
     }
@@ -57,46 +56,23 @@ namespace ReportAutomation.Vsto
 
     internal sealed class GenderSwapEngine
     {
-        internal GenderSwapScanResult FindDocumentCandidates(Word.Document document)
+        internal GenderSwapScanResult FindDocumentCandidates(
+            Word.Document document,
+            Action<int, int> reportProgress)
         {
-            var scopes = new List<Word.Range>();
-            foreach (Word.Range firstStory in document.StoryRanges)
-            {
-                Word.Range story = firstStory;
-                try
-                {
-                    while (story != null)
-                    {
-                        scopes.Add(story.Duplicate);
-                        Word.Range nextStory = story.NextStoryRange;
-                        if (!ReferenceEquals(story, firstStory))
-                        {
-                            GenderSwapScanResult.ReleaseComObject(story);
-                        }
-
-                        story = nextStory;
-                    }
-                }
-                finally
-                {
-                    if (story != null && !ReferenceEquals(story, firstStory))
-                    {
-                        GenderSwapScanResult.ReleaseComObject(story);
-                    }
-
-                    GenderSwapScanResult.ReleaseComObject(firstStory);
-                }
-            }
-
-            return FindCandidates(scopes);
+            return FindCandidates(new List<Word.Range> { document.Content }, reportProgress);
         }
 
-        internal GenderSwapScanResult FindRangeCandidates(Word.Range range)
+        internal GenderSwapScanResult FindRangeCandidates(
+            Word.Range range,
+            Action<int, int> reportProgress)
         {
-            return FindCandidates(new List<Word.Range> { range.Duplicate });
+            return FindCandidates(new List<Word.Range> { range.Duplicate }, reportProgress);
         }
 
-        private static GenderSwapScanResult FindCandidates(List<Word.Range> scopes)
+        private static GenderSwapScanResult FindCandidates(
+            List<Word.Range> scopes,
+            Action<int, int> reportProgress)
         {
             var candidates = new List<GenderSwapCandidate>();
             try
@@ -104,26 +80,61 @@ namespace ReportAutomation.Vsto
                 for (int scopeIndex = 0; scopeIndex < scopes.Count; scopeIndex++)
                 {
                     Word.Range scope = scopes[scopeIndex];
-                    string text = scope.Text ?? string.Empty;
-                    foreach (GenderTextMatch match in GenderRules.FindMatches(text))
+                    var expectedMatches = new List<GenderTextMatch>(
+                        GenderRules.FindMatches(scope.Text ?? string.Empty));
+                    int total = expectedMatches.Count;
+                    ReportProgress(reportProgress, 0, total);
+
+                    int nextStart = scope.Start;
+                    int scopeEnd = scope.End;
+                    Word.Range search = scope.Duplicate;
+                    Word.Find find = null;
+                    try
                     {
-                        candidates.Add(new GenderSwapCandidate
+                        find = search.Find;
+                        find.ClearFormatting();
+                        find.Forward = true;
+                        find.Wrap = Word.WdFindWrap.wdFindStop;
+                        find.Format = false;
+                        find.MatchCase = false;
+                        find.MatchWholeWord = true;
+                        find.MatchWildcards = false;
+                        find.MatchSoundsLike = false;
+                        find.MatchAllWordForms = false;
+
+                        for (int index = 0; index < total && nextStart < scopeEnd; index++)
                         {
-                            ScopeIndex = scopeIndex,
-                            Start = scope.Start + match.Index,
-                            Length = match.Length,
-                            StoryType = scope.StoryType,
-                            Original = match.Value,
-                            Replacement = GenderRules.ReplacementFor(match.Value)
-                        });
+                            GenderTextMatch expected = expectedMatches[index];
+                            search.SetRange(nextStart, scopeEnd);
+                            find.Text = expected.Value;
+                            if (find.Execute())
+                            {
+                                string original = search.Text;
+                                candidates.Add(new GenderSwapCandidate
+                                {
+                                    ScopeIndex = scopeIndex,
+                                    Start = search.Start,
+                                    Length = search.End - search.Start,
+                                    Original = original,
+                                    Replacement = GenderRules.ReplacementFor(original)
+                                });
+
+                                nextStart = search.End;
+                            }
+
+                            int completed = index + 1;
+                            if (completed == total || completed % 10 == 0)
+                            {
+                                ReportProgress(reportProgress, completed, total);
+                            }
+                        }
+                    }
+                    finally
+                    {
+                        GenderSwapScanResult.ReleaseComObject(find);
+                        GenderSwapScanResult.ReleaseComObject(search);
                     }
                 }
-
-                candidates.Sort((left, right) =>
-                {
-                    int storyComparison = left.StoryType.CompareTo(right.StoryType);
-                    return storyComparison != 0 ? storyComparison : left.Start.CompareTo(right.Start);
-                });
 
                 return new GenderSwapScanResult(scopes, candidates);
             }
@@ -135,6 +146,14 @@ namespace ReportAutomation.Vsto
                 }
 
                 throw;
+            }
+        }
+
+        private static void ReportProgress(Action<int, int> reportProgress, int completed, int total)
+        {
+            if (reportProgress != null)
+            {
+                reportProgress(completed, total);
             }
         }
     }
