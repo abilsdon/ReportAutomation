@@ -52,78 +52,101 @@ namespace ReportAutomation.Vsto
             }
 
             Word.Range selectedRange = selection.Range.Duplicate;
-            ReviewChanges(
-                "the current selection",
-                () => new GenderSwapEngine().FindRangeCandidates(selectedRange));
+            try
+            {
+                ReviewChanges(
+                    "the current selection",
+                    () => new GenderSwapEngine().FindRangeCandidates(selectedRange));
+            }
+            finally
+            {
+                GenderSwapScanResult.ReleaseComObject(selectedRange);
+            }
         }
 
         private static void ReviewChanges(
             string scopeDescription,
-            Func<List<GenderSwapCandidate>> findCandidates)
+            Func<GenderSwapScanResult> findCandidates)
         {
             try
             {
-                List<GenderSwapCandidate> candidates = findCandidates();
-                if (candidates.Count == 0)
+                using (GenderSwapScanResult scan = findCandidates())
                 {
-                    MessageBox.Show("No supported gendered words were found in " + scopeDescription + ".",
-                        "Report Automation", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    return;
-                }
-
-                DialogResult confirmation = MessageBox.Show(
-                    string.Format("Found {0} proposed {1} in {2}.\n\nReview each change?",
-                        candidates.Count, candidates.Count == 1 ? "change" : "changes", scopeDescription),
-                    "Gender Swap Preview", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
-                if (confirmation != DialogResult.Yes)
-                {
-                    return;
-                }
-
-                Word.Application application = Globals.ThisAddIn.Application;
-                application.UndoRecord.StartCustomRecord("Gender Swap");
-                int approved = 0;
-                int skipped = 0;
-                bool cancelled = false;
-                try
-                {
-                    for (int index = 0; index < candidates.Count; index++)
+                    List<GenderSwapCandidate> candidates = scan.Candidates;
+                    if (candidates.Count == 0)
                     {
-                        GenderSwapCandidate candidate = candidates[index];
-                        candidate.Range.Select();
-                        application.ActiveWindow.ScrollIntoView(candidate.Range, true);
+                        MessageBox.Show("No supported gendered words were found in " + scopeDescription + ".",
+                            "Report Automation", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        return;
+                    }
 
-                        DialogResult decision = MessageBox.Show(
-                            string.Format("Change {0} of {1}\n\n{2}  →  {3}\n\nYes = approve   No = skip   Cancel = stop",
-                                index + 1, candidates.Count, candidate.Original, candidate.Replacement),
-                            "Review Gender Swap", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
+                    DialogResult confirmation = MessageBox.Show(
+                        string.Format("Found {0} proposed {1} in {2}.\n\nReview each change?",
+                            candidates.Count, candidates.Count == 1 ? "change" : "changes", scopeDescription),
+                        "Gender Swap Preview", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                    if (confirmation != DialogResult.Yes)
+                    {
+                        return;
+                    }
 
-                        if (decision == DialogResult.Cancel)
+                    Word.Application application = Globals.ThisAddIn.Application;
+                    var positionOffsets = new Dictionary<int, int>();
+                    application.UndoRecord.StartCustomRecord("Gender Swap");
+                    int approved = 0;
+                    int skipped = 0;
+                    bool cancelled = false;
+                    try
+                    {
+                        for (int index = 0; index < candidates.Count; index++)
                         {
-                            cancelled = true;
-                            break;
-                        }
+                            GenderSwapCandidate candidate = candidates[index];
+                            int positionOffset;
+                            positionOffsets.TryGetValue(candidate.ScopeIndex, out positionOffset);
+                            Word.Range candidateRange = scan.CreateRange(candidate, positionOffset);
+                            try
+                            {
+                                candidateRange.Select();
+                                application.ActiveWindow.ScrollIntoView(candidateRange, true);
 
-                        if (decision == DialogResult.Yes)
-                        {
-                            candidate.Range.Text = candidate.Replacement;
-                            approved++;
-                        }
-                        else
-                        {
-                            skipped++;
+                                DialogResult decision = MessageBox.Show(
+                                    string.Format("Change {0} of {1}\n\n{2}  ->  {3}\n\nYes = approve   No = skip   Cancel = stop",
+                                        index + 1, candidates.Count, candidate.Original, candidate.Replacement),
+                                    "Review Gender Swap", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
+
+                                if (decision == DialogResult.Cancel)
+                                {
+                                    cancelled = true;
+                                    break;
+                                }
+
+                                if (decision == DialogResult.Yes)
+                                {
+                                    candidateRange.Text = candidate.Replacement;
+                                    positionOffsets[candidate.ScopeIndex] = positionOffset
+                                        + candidate.Replacement.Length - candidate.Length;
+                                    approved++;
+                                }
+                                else
+                                {
+                                    skipped++;
+                                }
+                            }
+                            finally
+                            {
+                                GenderSwapScanResult.ReleaseComObject(candidateRange);
+                            }
                         }
                     }
-                }
-                finally
-                {
-                    application.UndoRecord.EndCustomRecord();
-                }
+                    finally
+                    {
+                        application.UndoRecord.EndCustomRecord();
+                    }
 
-                MessageBox.Show(string.Format(
-                    "{0}\n\nApproved: {1}\nSkipped: {2}\n\nApproved changes can be undone as one Word action.",
-                    cancelled ? "Review stopped." : "Review complete.", approved, skipped), "Report Automation",
-                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    MessageBox.Show(string.Format(
+                        "{0}\n\nApproved: {1}\nSkipped: {2}\n\nApproved changes can be undone as one Word action.",
+                        cancelled ? "Review stopped." : "Review complete.", approved, skipped), "Report Automation",
+                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
             }
             catch (Exception exception)
             {
