@@ -46,19 +46,29 @@ namespace ReportAutomation.Vsto
 
         public void SwapSelection(Office.IRibbonControl control)
         {
-            Word.Selection selection = Globals.ThisAddIn.Application.Selection;
-            if (selection == null || selection.Range.Start == selection.Range.End)
-            {
-                MessageBox.Show("Select some text first.", "Report Automation", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
-
-            Word.Range selectedRange = selection.Range.Duplicate;
+            Word.Range selectedRange = null;
             try
             {
+                Word.Selection selection = Globals.ThisAddIn.Application.Selection;
+                if (selection != null)
+                {
+                    selectedRange = selection.Range;
+                }
+
+                if (selectedRange == null || selectedRange.Start == selectedRange.End)
+                {
+                    MessageBox.Show("Select some text first.", "Report Automation", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
                 ReviewChanges(
                     "the current selection",
                     progress => new GenderSwapEngine().FindRangeCandidates(selectedRange, progress));
+            }
+            catch (Exception exception)
+            {
+                MessageBox.Show("The selected text could not be read:\n\n" + exception.Message,
+                    "Report Automation", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             finally
             {
